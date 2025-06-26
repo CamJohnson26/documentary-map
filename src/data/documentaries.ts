@@ -12311,5 +12311,25 @@ export const sampleEvents: EventData[] = [
         },
         "event_start": 1945,
         "event_end": 2015
+    },
+    {
+        "title": "The Act of Killing",
+        "description": "Portrait of death squads",
+        "location": {
+            "lat": -6.1751,
+            "lng": 106.865
+        },
+        "event_start": 1965,
+        "event_end": 1966
+    },
+    {
+        "title": "The Look of Silence",
+        "description": "Aftermath through a brother’s eyes",
+        "location": {
+            "lat": -6.1751,
+            "lng": 106.865
+        },
+        "event_start": 1965,
+        "event_end": 1966
     }
 ]
