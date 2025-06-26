@@ -4,6 +4,7 @@ import {
     TileLayer,
     CircleMarker,
     Popup,
+    Marker,
     useMap,
 } from "react-leaflet";
 import type {LatLngExpression} from "leaflet";
@@ -13,6 +14,8 @@ import "rc-slider/assets/index.css";
 import Tooltip from "rc-tooltip";
 import "rc-tooltip/assets/bootstrap.css";
 import {sampleEvents} from '../data/documentaries.ts'
+import { useMapEvent } from "react-leaflet";
+import L from 'leaflet';
 
 function FitWorldOnce() {
     const map = useMap();
@@ -132,47 +135,121 @@ const WorldMap: React.FC = () => {
     );
 };
 
-function MapEvents({ sliderValue, currentYear }: { sliderValue: number, currentYear: number }) {
+function MapEvents({ sliderValue, currentYear }: { sliderValue: number; currentYear: number }) {
+    const map = useMap();
+    const [clusters, setClusters] = useState<any[]>([]);
+    const [zoom, setZoom] = useState(map.getZoom());
+
+    // Handle zoom change
+    useMapEvent("zoomend", () => {
+        setZoom(map.getZoom());
+    });
+
+    // Recompute clusters when zoom or slider changes
+    useEffect(() => {
+        const thresholdDegrees = 360 / Math.pow(2, zoom + 2); // smaller when zoomed in
+        const clustered: any[] = [];
+
+        const unvisited = [...sampleEvents];
+        while (unvisited.length) {
+            const base = unvisited.pop()!;
+            const cluster = [base];
+
+            for (let i = unvisited.length - 1; i >= 0; i--) {
+                const other = unvisited[i];
+                const dLat = Math.abs(base.location.lat - other.location.lat);
+                const dLng = Math.abs(base.location.lng - other.location.lng);
+                if (dLat <= thresholdDegrees && dLng <= thresholdDegrees) {
+                    cluster.push(other);
+                    unvisited.splice(i, 1);
+                }
+            }
+
+            clustered.push(cluster);
+        }
+
+        setClusters(clustered);
+    }, [zoom, sliderValue]);
+
     return (
         <>
-            {sampleEvents.map((event, idx) => {
-                const midYear = (event.event_start + event.event_end) / 2;
-                const eventSliderValue = getSliderValueFromYear(midYear, currentYear);
+            {clusters.map((events, idx) => {
+                const lat = events.reduce((sum, e) => sum + e.location.lat, 0) / events.length;
+                const lng = events.reduce((sum, e) => sum + e.location.lng, 0) / events.length;
 
-                const sliderDistance = Math.abs(sliderValue - eventSliderValue);
-
-                // Fade in fully if within 5 steps, then fade out linearly up to 10
-                let alpha = 0;
-                if (sliderDistance <= 5) alpha = 1;
-                else if (sliderDistance <= 10) alpha = 1 - (sliderDistance - 5) / 5;
-                else alpha = 0.1;
+                let maxAlpha = 0;
+                for (const event of events) {
+                    const midYear = (event.event_start + event.event_end) / 2;
+                    const eventSliderValue = getSliderValueFromYear(midYear, currentYear);
+                    const sliderDistance = Math.abs(sliderValue - eventSliderValue);
+                    let alpha = 0;
+                    if (sliderDistance <= 5) alpha = 1;
+                    else if (sliderDistance <= 10) alpha = 1 - (sliderDistance - 5) / 5;
+                    else alpha = 0.1;
+                    if (alpha > maxAlpha) maxAlpha = alpha;
+                }
 
                 return (
-                    <CircleMarker
-                        key={idx}
-                        center={[event.location.lat, event.location.lng] as LatLngExpression}
-                        radius={10}
-                        pathOptions={{
-                            color: "black",
-                            fillColor: "red",
-                            fillOpacity: alpha,
-                            weight: 1,
-                        }}
-                        className="fade-transition"
-                    >
-                        <Popup>
-                            <strong>{event.title}</strong>
-                            <br />
-                            {event.description}
-                            <br />
-                            {event.event_start} – {event.event_end}
-                        </Popup>
-                    </CircleMarker>
+                    <React.Fragment key={idx}>
+                        <CircleMarker
+                            center={[lat, lng] as LatLngExpression}
+                            radius={8 + Math.min(events.length, 10)}
+                            pathOptions={{
+                                color: "black",
+                                fillColor: "#c1121f",
+                                fillOpacity: maxAlpha,
+                                weight: 1,
+                            }}
+                        >
+                            <Popup>
+                                <div style={{ maxHeight: "150px", overflowY: "auto", paddingRight: "4px" }}>
+                                    {events.map((event, i) => (
+                                        <div key={i} style={{ marginBottom: "8px" }}>
+                                            <strong>{event.title}</strong>
+                                            <br />
+                                            {event.description}
+                                            <br />
+                                            {event.event_start} – {event.event_end}
+                                        </div>
+                                    ))}
+                                </div>
+                            </Popup>
+                        </CircleMarker>
+
+                        {events.length > 1 && (
+                            <Marker
+                                position={[lat, lng] as LatLngExpression}
+                                interactive={false}
+                                icon={L.divIcon({
+                                    className: 'event-cluster-label',
+                                    html: `<div style="
+      background: white;
+      color: black;
+      border: 1px solid black;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+         transform: translate(-1px, -1px);
+      justify-content: center;
+      font-size: 10px;
+      font-weight: bold;
+      pointer-events: none;
+  ">${events.length}</div>`,
+                                    iconSize: [20, 20],
+                                    iconAnchor: [10, 10],
+                                })}
+                            />
+                        )}
+                    </React.Fragment>
                 );
             })}
         </>
     );
 }
+
+
 
 
 export default WorldMap;
